@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Square 予約 プラン判定フロー(CS向け)</title>
+<style>
+:root{
+  --bg:#f7f7f5;--surface:#ffffff;--surface-2:#f0efeb;--text:#1f2328;--text-2:#5b6068;--text-3:#8a8f98;
+  --border:#d9d8d3;--border-strong:#a9a8a2;--accent:#1d5fa8;
+  --prem-bg:#fbeee3;--prem-bd:#d9893f;--prem-tx:#6b3a0c;
+  --plus-bg:#e4f2e6;--plus-bd:#4f9a5b;--plus-tx:#1e4a27;
+  --warn-bg:#fbf1d8;--warn-tx:#5d4306;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#16181b;--surface:#1f2226;--surface-2:#2a2e33;--text:#eceae5;--text-2:#b0b3b8;--text-3:#80848b;
+    --border:#3a3e44;--border-strong:#5a5f66;--accent:#7db4ee;
+    --prem-bg:#3d2a17;--prem-bd:#c9843f;--prem-tx:#f3d3b0;
+    --plus-bg:#1f3524;--plus-bd:#5aa468;--plus-tx:#c6e6cc;
+    --warn-bg:#3a3118;--warn-tx:#f0dfaa;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif;line-height:1.7}
+main{max-width:760px;margin:0 auto;padding:28px 20px 48px}
+h1{font-size:20px;font-weight:600;margin:0 0 4px}
+.lead{font-size:13px;color:var(--text-2);margin:0 0 20px}
+.grp{font-size:12px;color:var(--text-2);margin:0 0 6px}
+.row{display:flex;gap:6px;margin-bottom:14px}
+.pill{flex:1;min-width:0;border:1px solid var(--border);border-radius:6px;padding:8px 6px;font-size:12px;text-align:center;background:var(--surface-2);color:var(--text-3);line-height:1.4;overflow-wrap:anywhere}
+.pill b{display:block;font-weight:600}
+.pill.cur{border:2px solid var(--accent);color:var(--text);background:var(--surface)}
+.pill.info{color:var(--text);background:var(--surface)}
+.pill.no{color:var(--text-2)}
+.pill.yp{background:var(--prem-bg);border-color:var(--prem-bd);color:var(--prem-tx)}
+.pill.yl{background:var(--plus-bg);border-color:var(--plus-bd);color:var(--plus-tx)}
+.pill.skip{border-style:dashed;opacity:.6}
+.card{border:1px solid var(--border);border-radius:10px;padding:20px 22px;background:var(--surface)}
+.step{font-size:13px;color:var(--text-2)}
+.q{font-size:19px;font-weight:600;line-height:1.6;margin:8px 0}
+.hint{font-size:13px;color:var(--text-2);margin-bottom:16px}
+.btn{font:inherit;font-size:15px;padding:11px 14px;border-radius:6px;border:1px solid var(--border-strong);background:var(--surface);color:var(--text);cursor:pointer;line-height:1.5}
+.btn:hover{background:var(--surface-2)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.sm{font-size:13px;padding:6px 12px;color:var(--text-2)}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opts .btn{flex:1 1 45%}
+.yn{display:flex;gap:10px}
+.yn .btn{flex:1}
+.result{border-radius:8px;padding:16px 18px;border:1px solid var(--border)}
+.result h2{font-size:20px;font-weight:600;margin:0}
+.result p{margin:4px 0 0;font-size:14px}
+.result.p{background:var(--prem-bg);border-color:var(--prem-bd);color:var(--prem-tx)}
+.result.l{background:var(--plus-bg);border-color:var(--plus-bd);color:var(--plus-tx)}
+.result.f{background:var(--surface-2)}
+.note{border-radius:6px;padding:10px 14px;margin-top:10px;font-size:13px;background:var(--warn-bg);color:var(--warn-tx)}
+.memo{font-size:13px;color:var(--text-2);margin-top:14px;line-height:1.8;word-break:break-all}
+.actions{display:flex;gap:8px;margin-top:16px}
+footer{margin-top:20px;font-size:12px;color:var(--text-3);line-height:1.8}
+@media (max-width:560px){.row{flex-wrap:wrap}.pill{flex:1 1 45%}.opts .btn{flex:1 1 100%}}
+</style>
+</head>
+<body>
+<main>
+<h1>Square 予約 プラン判定フロー</h1>
+<p class="lead">お客さまに質問を読み上げながら、はい・いいえを選ぶと、フリー・プラス・プレミアムのどれが適しているかが分かります。</p>
+<div id="app"></div>
+<footer>
+判定ロジック: プレミアム要件(No.5〜8)に1つでも「はい」→プレミアム / なければプラス要件(No.1〜4)に1つでも「はい」→プラス / すべて「いいえ」→フリー。<br>
+根拠: Square 公式 https://squareup.com/jp/appointments(取得日 2026-10-27)。No.4・No.7・No.8 は機能の範囲が未確認のため、ヘルプセンターで要確認。<br>
+同一枠に複数の顧客を受ける運用の注意は、Squareコミュニティの回答に基づくもので、公式ヘルプでは未確認です。
+</footer>
+</main>
+<script>
+const IND=['美容室・ネイル・エステ','整体・治療院','教室・スクール','飲食店(席予約)','レンタルスペース・施設','出張・訪問サービス','その他'];
+const ORG=['個人(1名)運営','複数スタッフ・1店舗','複数店舗展開'];
+const SLOT=['1:同時間帯は1予約のみ','2:複数スタッフで並行対応','3:部屋・設備の数だけ並行対応','4:同一枠に複数の顧客(定員制)'];
+const CAP=['教室・スクール','飲食店(席予約)','レンタルスペース・施設'];
+const S=[
+{k:'c',label:'業種',q:'どのような業種ですか?',hint:'シートの「業種」に転記します',opts:IND},
+{k:'c',label:'業態',q:'運営体制を教えてください。(個人運営・複数スタッフ・複数店舗)',hint:'プランは店舗ごとの月額。店舗数も確認',opts:ORG},
+{k:'c',label:'同時間帯の枠',q:'同じ時間帯の予約枠は、どのように受けたいですか?',hint:'聞き方: 「同じ時間に何組まで受けたいか」「その数は人・部屋や設備・定員のどれで決まるか」',opts:SLOT},
+{k:'y',no:5,g:'p',label:'リソース管理',q:'施術ベッド・個室・機材など、予約時に「空き状況を管理したい設備」はありますか?',hint:'例: 個室の重複予約防止、撮影機材の貸出管理'},
+{k:'y',no:6,g:'p',label:'歩合給設定',q:'スタッフごとに歩合率を変えて管理したいですか?',hint:'個人別・メニュー別など、歩合の体系を聞き取る'},
+{k:'y',no:7,g:'p',label:'スタッフ予定',q:'スタッフのシフトやスケジュールも Square 上で管理したいですか?',hint:'公式では「一部のスケジュール機能」。対象範囲は要確認'},
+{k:'y',no:8,g:'p',label:'アクセスプラス',q:'Square アクセスプラスの機能を使いたいご希望はありますか?',hint:'機能の内容は未確認。ヘルプセンターで確認してから質問'},
+{k:'y',no:1,g:'l',label:'予約確認通知',q:'お客さまへの予約確認を、メールやSMSで自動送信したいですか?',hint:'通知の種類・リマインドの要否も深掘り'},
+{k:'y',no:2,g:'l',label:'複数スタッフ予約',q:'1件の予約に、複数のスタッフを割り当てたいですか?',hint:'例: 2名同時施術、担当とアシスタント'},
+{k:'y',no:3,g:'l',label:'無断キャンセル対策',q:'無断キャンセルへの対策を入れたいですか?',hint:'キャンセルポリシーや事前カード登録の運用有無'},
+{k:'y',no:4,g:'l',label:'対応時間設定',q:'予約を受け付ける対応時間を、きめ細かく設定したいですか?',hint:'店舗別・スタッフ別・曜日別など。粒度は要確認'}];
+const N=S.length;let A=[];
+const R={p:['プレミアムプランがおすすめ','プレミアム限定の機能が必要なため。'],
+l:['プラスプランがおすすめ','プラス以上の機能が必要で、プレミアム限定の要件はないため。'],
+f:['フリープランで始められます','上位プラン向けの要件はありませんでした。必要になれば、いつでもプラン変更できます。']};
+const app=document.getElementById('app');
+function yi(){for(let i=3;i<A.length;i++)if(A[i]==='y')return i;return -1}
+function done(){return A.length>=3&&(yi()>=0||A.length===N)}
+function pick(i){A.push(S[A.length].opts[i]);draw()}
+function ans(v){A.push(v);draw()}
+function back(){A.pop();draw()}
+function reset(){A=[];draw()}
+function pill(i){
+ const q=S[i];let c='pill',t='';
+ if(i<A.length){
+  if(q.k==='c'){c+=' info';t=A[i]}
+  else if(A[i]==='y'){c+=q.g==='p'?' yp':' yl';t='はい'}else{c+=' no';t='いいえ'}}
+ else if(done()){c+=' skip';t='スキップ'}
+ else if(i===A.length){c+=' cur';t='質問中'}
+ else t='未確認';
+ return '<div class="'+c+'"><b>'+q.label+'</b>'+t+'</div>'}
+function draw(){
+ let h='<p class="grp">0. 基本ヒアリング(業種・業態・同時間帯の枠)</p><div class="row">';
+ for(let i=0;i<3;i++)h+=pill(i);
+ h+='</div><p class="grp">1. プレミアム要件の確認(1つでも「はい」ならプレミアム)</p><div class="row">';
+ for(let i=3;i<7;i++)h+=pill(i);
+ h+='</div><p class="grp">2. プラス要件の確認(1つでも「はい」ならプラス)</p><div class="row">';
+ for(let i=7;i<11;i++)h+=pill(i);
+ h+='</div><div class="card">';
+ if(!done()){
+  const q=S[A.length];let hint=q.hint;
+  if(A.length===2&&CAP.indexOf(A[0])>=0)hint+='<br>この業種は定員制(同一枠に複数の顧客)が多いため、選択肢4に当たらないか特に確認';
+  h+='<div class="step">質問 '+(A.length+1)+' / '+N+(q.no?'(シート No.'+q.no+')':'')+'</div>'
+   +'<div class="q">'+q.q+'</div><div class="hint">深掘りポイント: '+hint+'</div>';
+  if(q.k==='c'){h+='<div class="opts">'+q.opts.map((o,i)=>'<button class="btn" onclick="pick('+i+')">'+o+'</button>').join('')+'</div>'}
+  else{h+='<div class="yn"><button class="btn" onclick="ans(\'y\')">はい</button><button class="btn" onclick="ans(\'n\')">いいえ</button></div>'}
+ }else{
+  const y=yi(),k=y>=0?S[y].g:'f',r=R[k],sl=A[2];
+  h+='<div class="result '+k+'"><h2>'+r[0]+'</h2><p>'+(y>=0?'決め手: 「'+S[y].label+'」(シート No.'+S[y].no+')。':'')+r[1]+'</p></div>';
+  const n=[];
+  if(sl.charAt(0)==='2')n.push('同時間帯は、スタッフ登録で並行対応できる想定です。1つの予約に複数担当を割り当てるなら「複数スタッフ予約」(プラス)の要件です。');
+  if(sl.charAt(0)==='3'&&A[3]!=='y')n.push('同時間帯を設備・部屋の数で受けたい回答ですが、リソース管理が「いいえ」です。矛盾していないか再確認してください。');
+  if(sl.charAt(0)==='3'&&A[3]==='y')n.push('設備・部屋ごとに同時予約を受けたい要件と、リソース管理(プレミアム)が一致しています。');
+  if(sl.charAt(0)==='4')n.push('同一枠に複数の顧客を受ける運用は、Square 予約では標準で難しい可能性があります(コミュニティ回答ベース、公式未確認)。プラン判定とは別に、適合性をSquareへ確認してください。');
+  n.forEach(t=>{h+='<div class="note">'+t+'</div>'});
+  h+='<div class="memo">回答メモ(シート転記用): 業種='+A[0]+' / 業態='+A[1]+' / 同時間帯='+A[2]+' / '
+   +A.slice(3).map((v,i)=>'No.'+S[i+3].no+' '+S[i+3].label+'='+(v==='y'?'はい':'いいえ')).join(' / ')+'</div>';
+ }
+ h+='<div class="actions">'+(A.length?'<button class="btn sm" onclick="back()">1つ戻る</button>':'')
+  +'<button class="btn sm" onclick="reset()">最初からやり直す</button></div></div>';
+ app.innerHTML=h}
+draw();
+</script>
+</body>
+</html>
